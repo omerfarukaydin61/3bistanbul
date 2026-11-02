@@ -1,0 +1,6 @@
+# Indirilen 3D veri (yuzlerce GB) ve uretilen katalog
+data/
+
+__pycache__/
+*.pyc
+.playwright-mcp/

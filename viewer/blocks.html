@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blok Haritası</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --fg: #1d2330;
+      --muted: #6b7280;
+      --line: #e3e6eb;
+      --base: #2563eb;
+      --local: #16a34a;
+      --sel: #ea580c;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; color: var(--fg); background: var(--bg); }
+    body { display: flex; }
+    #map { flex: 1; height: 100%; }
+    aside {
+      width: 330px; height: 100%; display: flex; flex-direction: column;
+      border-left: 1px solid var(--line); background: var(--bg);
+    }
+    header { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+    h1 { font-size: 16px; margin: 0 0 8px; }
+    .legend { display: flex; gap: 12px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+    .legend span::before {
+      content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 5px;
+      border: 2px solid var(--c); background: color-mix(in srgb, var(--c) 25%, transparent); vertical-align: -1px;
+    }
+    input[type=search] {
+      width: 100%; margin-top: 10px; padding: 7px 9px; font: inherit; font-size: 13px;
+      border: 1px solid var(--line); border-radius: 6px;
+    }
+    #list { flex: 1; overflow-y: auto; margin: 0; padding: 4px 0; list-style: none; }
+    #list li {
+      display: flex; align-items: center; gap: 8px; padding: 4px 16px; font-size: 13px; cursor: pointer;
+    }
+    #list li:hover, #list li.hover { background: #f3f4f6; }
+    #list li .tag { margin-left: auto; font-size: 11px; color: var(--local); }
+    footer { border-top: 1px solid var(--line); padding: 12px 16px; font-size: 13px; }
+    #summary { margin-bottom: 8px; }
+    #cmd {
+      width: 100%; height: 76px; resize: none; font: 12px/1.4 ui-monospace, Consolas, monospace;
+      padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: #f8f9fb; color: var(--fg);
+    }
+    .row { display: flex; gap: 8px; margin-top: 8px; }
+    button {
+      flex: 1; padding: 7px; font: inherit; font-size: 13px; cursor: pointer;
+      border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg);
+    }
+    button.primary { background: var(--sel); border-color: var(--sel); color: #fff; }
+    .lbl {
+      background: transparent; border: 0; box-shadow: none; padding: 0;
+      font: 600 11px system-ui, sans-serif; color: #111; text-shadow: 0 0 3px #fff, 0 0 3px #fff;
+    }
+    .lbl::before { display: none; }
+    @media (max-width: 700px) {
+      body { flex-direction: column; }
+      #map { height: 55%; flex: none; }
+      aside { width: 100%; height: 45%; border-left: 0; border-top: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <aside>
+    <header>
+      <h1>3B İstanbul blokları <a href="viewer.html" style="float:right; font-size:13px; font-weight:400; color:var(--base)">← 3D görüntüleyici</a></h1>
+      <div class="legend">
+        <span style="--c: var(--base)">Sunucuda</span>
+        <span style="--c: var(--local)">İndirilmiş</span>
+        <span style="--c: var(--sel)">Seçili</span>
+      </div>
+      <input type="search" id="filter" placeholder="Blok ara (ör. 57, yama, adalar)">
+    </header>
+    <ul id="list"></ul>
+    <footer>
+      <div id="summary">Haritadan ya da listeden blok seç.</div>
+      <textarea id="cmd" readonly></textarea>
+      <div class="row">
+        <button id="clear">Temizle</button>
+        <button id="copy" class="primary">Komutu kopyala</button>
+      </div>
+    </footer>
+  </aside>
+
+  <script>
+    // Blok basina Draco geometri + JPEG doku (Blok_55 olcumu); tahmin icin kullanilir
+    const AVG_GB = 31;
+
+    const map = L.map("map").setView([41.05, 28.98], 10);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: "&copy; OpenStreetMap"
+    }).addTo(map);
+
+    const listEl = document.getElementById("list");
+    const cmdEl = document.getElementById("cmd");
+    const summaryEl = document.getElementById("summary");
+    const selected = new Set();
+    const items = [];
+
+    function shortName(name) {
+      return name.split("-").slice(1).join("-");
+    }
+    function label(name) {
+      return shortName(name).replace(/^Blok_/i, "").replace(/^Yama_/i, "Y ").replace(/_/g, " ");
+    }
+    function cmdArg(name) {
+      const s = shortName(name);
+      return /^Blok_/i.test(s) ? s.replace(/^Blok_/i, "") : s;
+    }
+
+    function style(item) {
+      const c = selected.has(item.name) ? "--sel" : item.local ? "--local" : "--base";
+      const color = getComputedStyle(document.documentElement).getPropertyValue(c).trim();
+      return { color: color, weight: selected.has(item.name) ? 3 : 1.5, fillColor: color, fillOpacity: selected.has(item.name) ? 0.3 : 0.08 };
+    }
+
+    function refresh() {
+      items.forEach(function(item) {
+        item.rect.setStyle(style(item));
+        item.cb.checked = selected.has(item.name);
+      });
+      const names = items.filter(function(i) { return selected.has(i.name); });
+      const toGet = names.filter(function(i) { return !i.local; });
+      if (!names.length) {
+        summaryEl.textContent = "Haritadan ya da listeden blok seç.";
+        cmdEl.value = "";
+        return;
+      }
+      summaryEl.textContent = names.length + " blok seçili" +
+        (names.length - toGet.length ? " (" + (names.length - toGet.length) + " tanesi zaten indirilmiş)" : "") +
+        " — indirilecek: ~" + (toGet.length * AVG_GB) + " GB";
+      cmdEl.value = "npm run download -- --blocks " +
+        names.map(function(i) { return cmdArg(i.name); }).join(" ");
+    }
+
+    function toggle(name) {
+      selected.has(name) ? selected.delete(name) : selected.add(name);
+      refresh();
+    }
+
+    function sortKey(name) {
+      const m = shortName(name).match(/^Blok_(\d+)/i);
+      return m ? [0, +m[1], name] : [1, 0, name];
+    }
+
+    async function isLocal(name) {
+      try {
+        const r = await fetch("/" + name + "/SceneServer/layers/0", { cache: "no-store" });
+        if (!r.ok) return false;
+        const info = await r.json();
+        return !!(info.nodePages || info.store);
+      } catch (e) {
+        return false;
+      }
+    }
+
+    async function init() {
+      const data = await (await fetch("block_extents.json", { cache: "no-store" })).json();
+      const blocks = data.blocks.filter(function(b) { return b.extent; });
+      blocks.sort(function(a, b) {
+        const x = sortKey(a.name), y = sortKey(b.name);
+        return x[0] - y[0] || x[1] - y[1] || x[2].localeCompare(y[2]);
+      });
+      const locals = await Promise.all(blocks.map(function(b) { return isLocal(b.name); }));
+
+      blocks.forEach(function(b, idx) {
+        const e = b.extent;
+        const item = { name: b.name, local: locals[idx] };
+        item.rect = L.rectangle([[e.ymin, e.xmin], [e.ymax, e.xmax]]).addTo(map);
+        item.rect.bindTooltip(label(b.name), { permanent: true, direction: "center", className: "lbl" });
+        item.rect.on("click", function() { toggle(b.name); });
+        item.rect.on("mouseover", function() { item.li.classList.add("hover"); });
+        item.rect.on("mouseout", function() { item.li.classList.remove("hover"); });
+
+        const li = document.createElement("li");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        li.appendChild(cb);
+        li.appendChild(document.createTextNode(shortName(b.name)));
+        if (item.local) {
+          const tag = document.createElement("span");
+          tag.className = "tag";
+          tag.textContent = "indirilmiş";
+          li.appendChild(tag);
+        }
+        li.addEventListener("click", function(ev) {
+          if (ev.target !== cb) toggle(b.name);
+          else { cb.checked ? selected.add(b.name) : selected.delete(b.name); refresh(); }
+        });
+        li.addEventListener("dblclick", function() { map.fitBounds(item.rect.getBounds()); });
+        li.addEventListener("mouseenter", function() { item.rect.setStyle({ weight: 4 }); });
+        li.addEventListener("mouseleave", function() { item.rect.setStyle(style(item)); });
+        listEl.appendChild(li);
+
+        item.li = li;
+        item.cb = cb;
+        items.push(item);
+      });
+
+      map.fitBounds(L.featureGroup(items.map(function(i) { return i.rect; })).getBounds());
+      refresh();
+    }
+
+    document.getElementById("filter").addEventListener("input", function(ev) {
+      const q = ev.target.value.trim().toLowerCase();
+      items.forEach(function(item) {
+        item.li.style.display = shortName(item.name).toLowerCase().includes(q) ? "" : "none";
+      });
+    });
+    document.getElementById("clear").addEventListener("click", function() {
+      selected.clear();
+      refresh();
+    });
+    document.getElementById("copy").addEventListener("click", function() {
+      if (!cmdEl.value) return;
+      navigator.clipboard.writeText(cmdEl.value).then(function() {
+        const btn = document.getElementById("copy");
+        btn.textContent = "Kopyalandı";
+        setTimeout(function() { btn.textContent = "Komutu kopyala"; }, 1500);
+      });
+    });
+
+    init().catch(function(err) {
+      summaryEl.textContent = "block_extents.json yüklenemedi: " + err.message +
+        " — sayfayı npm run dev ile aç (http://localhost:8765/blocks.html).";
+    });
+  </script>
+</body>
+</html>

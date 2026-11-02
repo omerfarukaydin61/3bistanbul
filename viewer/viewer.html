@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>3B Istanbul Viewer</title>
+  <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/dark/main.css">
+  <script src="https://js.arcgis.com/4.29/"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body, #viewDiv { width: 100%; height: 100%; }
+    #panel {
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(30,30,30,0.92); color: #eee;
+      padding: 14px 18px; border-radius: 8px;
+      font: 13px/1.6 system-ui, sans-serif;
+      max-width: 280px; z-index: 10;
+      backdrop-filter: blur(8px);
+    }
+    #panel h2 { font-size: 15px; margin-bottom: 8px; color: #fff; }
+    #layers { list-style: none; }
+    #layers li { padding: 3px 0; }
+    #layers label { cursor: pointer; }
+    #layers input { margin-right: 6px; }
+    #status { margin-top: 10px; font-size: 11px; color: #aaa; }
+    .loading { color: #f0c040; }
+    .loaded { color: #60d060; }
+    .error { color: #f06060; }
+    #blocksLink {
+      display: block; margin-top: 12px; padding: 6px 10px; text-align: center;
+      background: #ea580c; color: #fff; border-radius: 6px; text-decoration: none;
+    }
+    #blocksLink:hover { background: #c2410c; }
+  </style>
+</head>
+<body>
+  <div id="viewDiv"></div>
+  <div id="panel">
+    <h2>3B Istanbul</h2>
+    <ul id="layers"></ul>
+    <div id="status">Yukleniyor...</div>
+    <a id="blocksLink" href="blocks.html">Blok haritası / indirme</a>
+  </div>
+
+  <script>
+    require([
+      "esri/Map",
+      "esri/views/SceneView",
+      "esri/layers/IntegratedMeshLayer",
+      "esri/geometry/Extent"
+    ], function(Map, SceneView, IntegratedMeshLayer, Extent) {
+
+      const BASE = window.location.origin;
+
+      // Indirilmis bloklari bul: block_extents.json'daki her katman icin gecerli layer JSON'u var mi
+      async function findLocalBlocks() {
+        const data = await (await fetch("block_extents.json", { cache: "no-store" })).json();
+        const checks = await Promise.all(data.blocks.map(async function(b) {
+          try {
+            const r = await fetch(BASE + "/" + b.name + "/SceneServer/layers/0", { cache: "no-store" });
+            if (!r.ok) return null;
+            const info = await r.json();
+            return (info.nodePages || info.store) ? b.name : null;
+          } catch (e) {
+            return null;
+          }
+        }));
+        return checks.filter(Boolean);
+      }
+
+      const map = new Map({ basemap: "topo-3d", ground: "world-elevation" });
+
+      // topo-3d kendi beyaz 3D bina ve agac modellerini getiriyor; IBB mesh'inin icinden tasmasinlar
+      map.basemap.load().then(function() {
+        map.basemap.referenceLayers.forEach(function(layer) {
+          if (layer.title === "Buildings" || layer.title === "Trees") layer.visible = false;
+        });
+      });
+
+      const view = new SceneView({
+        container: "viewDiv",
+        map: map,
+        camera: {
+          position: { longitude: 28.94, latitude: 40.95, z: 2500 },
+          heading: 0,
+          tilt: 60
+        },
+        qualityProfile: "high",
+        environment: {
+          atmosphere: { quality: "high" },
+          lighting: { directShadowsEnabled: true, date: new Date("2024-06-15T10:00:00") }
+        }
+      });
+
+      const layersList = document.getElementById("layers");
+      const statusEl = document.getElementById("status");
+      const meshLayers = {};
+      let loadedCount = 0;
+
+      findLocalBlocks().then(function(BLOCKS) {
+      if (!BLOCKS.length) {
+        statusEl.textContent = "Indirilmis blok bulunamadi";
+        statusEl.className = "error";
+      }
+      BLOCKS.forEach(function(block) {
+        const li = document.createElement("li");
+        const label = document.createElement("label");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = true;
+        cb.dataset.block = block;
+
+        const displayName = block.replace(/^server\d*-/, "");
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(" " + displayName));
+        li.appendChild(label);
+        layersList.appendChild(li);
+
+        const url = BASE + "/" + block + "/SceneServer/layers/0";
+        const layer = new IntegratedMeshLayer({ url: url, title: displayName });
+
+        layer.when(function() {
+          loadedCount++;
+          statusEl.textContent = loadedCount + "/" + BLOCKS.length + " blok yuklendi";
+          statusEl.className = loadedCount === BLOCKS.length ? "loaded" : "loading";
+        }, function(err) {
+          loadedCount++;
+          console.warn(block + " yuklenemedi:", err);
+          statusEl.textContent = block + " hata: " + (err.message || err);
+          statusEl.className = "error";
+        });
+
+        meshLayers[block] = layer;
+        map.add(layer);
+
+        cb.addEventListener("change", function() {
+          layer.visible = cb.checked;
+        });
+      });
+      }, function(err) {
+        statusEl.textContent = "block_extents.json yuklenemedi: " + err.message;
+        statusEl.className = "error";
+      });
+
+      view.when(function() {
+        console.log("SceneView hazir");
+      });
+    });
+  </script>
+</body>
+</html>

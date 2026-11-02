@@ -1,0 +1,10 @@
+{
+  "name": "3bistanbul",
+  "private": true,
+  "scripts": {
+    "dev": "python viewer/serve.py",
+    "download": "python downloader/download_3d.py",
+    "extents": "python downloader/fetch_extents.py",
+    "clean-stubs": "python downloader/clean_stubs.py"
+  }
+}
