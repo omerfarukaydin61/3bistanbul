@@ -1,5 +1,5 @@
 """
-I3S lokal sunucu - repo'daki data/ klasorunu tarayicida gosterir.
+I3S lokal sunucu - DATA_DIR klasorunu (.env) tarayicida gosterir.
 Kullanim: python viewer/serve.py
 Sonra http://localhost:8765 adresini acin.
 """
@@ -83,7 +83,8 @@ class I3SHandler(http.server.BaseHTTPRequestHandler):
         if raw_path in PAGES:
             return self._serve_file(VIEWER_DIR / PAGES[raw_path], "text/html")
 
-        if raw_path == "block_extents.json":
+        # fetch_extents.py ciktisi (107 katman) varsa o sunulur; yoksa liste indirilmis bloklardan uretilir
+        if raw_path == "block_extents.json" and not (DATA_DIR / raw_path).is_file():
             body = json.dumps(_build_block_extents(), ensure_ascii=False).encode("utf-8")
             return self._send_bytes(body, "application/json")
 
