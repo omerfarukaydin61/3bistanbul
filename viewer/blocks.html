@@ -71,8 +71,8 @@
     <header>
       <h1>3B İstanbul blokları <a href="viewer.html" style="float:right; font-size:13px; font-weight:400; color:var(--base)">← 3D görüntüleyici</a></h1>
       <div class="legend">
-        <span style="--c: var(--base)">Sunucuda</span>
-        <span style="--c: var(--local)">İndirilmiş</span>
+        <span style="--c: var(--base)">İndirilebilir <b id="n-remote"></b></span>
+        <span style="--c: var(--local)">İndirilmiş <b id="n-local"></b></span>
         <span style="--c: var(--sel)">Seçili</span>
       </div>
       <input type="search" id="filter" placeholder="Blok ara (ör. 57, yama, adalar)">
@@ -118,7 +118,12 @@
     function style(item) {
       const c = selected.has(item.name) ? "--sel" : item.local ? "--local" : "--base";
       const color = getComputedStyle(document.documentElement).getPropertyValue(c).trim();
-      return { color: color, weight: selected.has(item.name) ? 3 : 1.5, fillColor: color, fillOpacity: selected.has(item.name) ? 0.3 : 0.08 };
+      const sel = selected.has(item.name);
+      return {
+        color: color, fillColor: color,
+        weight: sel ? 3 : item.local ? 2 : 1,
+        fillOpacity: sel ? 0.3 : item.local ? 0.25 : 0.06
+      };
     }
 
     function refresh() {
@@ -204,6 +209,9 @@
         items.push(item);
       });
 
+      const nLocal = items.filter(function(i) { return i.local; }).length;
+      document.getElementById("n-local").textContent = "(" + nLocal + ")";
+      document.getElementById("n-remote").textContent = "(" + (items.length - nLocal) + ")";
       map.fitBounds(L.featureGroup(items.map(function(i) { return i.rect; })).getBounds());
       refresh();
     }

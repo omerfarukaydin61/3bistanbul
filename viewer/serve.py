@@ -29,8 +29,14 @@ if not os.environ.get("DATA_DIR"):
     sys.exit("DATA_DIR tanimli degil: .env.example'i .env olarak kopyalayip veri klasorunu yazin")
 DATA_DIR = Path(os.environ["DATA_DIR"]).expanduser()
 PORT = 8765
-PAGES = {"": "viewer.html", "index.html": "viewer.html",
-         "viewer.html": "viewer.html", "blocks.html": "blocks.html"}
+# Repo'daki viewer/ dosyalari; geri kalan her yol DATA_DIR'dan sunulur
+VIEWER_FILES = {
+    "": ("viewer.html", "text/html"),
+    "index.html": ("viewer.html", "text/html"),
+    "viewer.html": ("viewer.html", "text/html"),
+    "blocks.html": ("blocks.html", "text/html"),
+    "block_extents.json": ("block_extents.json", "application/json"),
+}
 
 MIME_MAP = {
     ".json": "application/json",
@@ -54,39 +60,14 @@ def fix_texture_defs(data):
     return data
 
 
-def _build_block_extents():
-    blocks = []
-    for d in sorted(DATA_DIR.iterdir()):
-        if not d.is_dir() or not d.name.startswith("server"):
-            continue
-        layer_json = d / "layers" / "0.json"
-        extent = None
-        if layer_json.is_file():
-            try:
-                info = json.loads(layer_json.read_bytes())
-                ext = info.get("fullExtent") or info.get("store", {}).get("extent")
-                if isinstance(ext, dict):
-                    extent = {k: ext[k] for k in ("xmin", "ymin", "xmax", "ymax") if k in ext}
-                elif isinstance(ext, list) and len(ext) >= 4:
-                    extent = {"xmin": ext[0], "ymin": ext[1], "xmax": ext[2], "ymax": ext[3]}
-            except Exception:
-                pass
-        blocks.append({"name": d.name, "extent": extent})
-    return {"blocks": blocks}
-
-
 class I3SHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         raw_path = unquote(parsed.path).lstrip("/")
 
-        if raw_path in PAGES:
-            return self._serve_file(VIEWER_DIR / PAGES[raw_path], "text/html")
-
-        # fetch_extents.py ciktisi (107 katman) varsa o sunulur; yoksa liste indirilmis bloklardan uretilir
-        if raw_path == "block_extents.json" and not (DATA_DIR / raw_path).is_file():
-            body = json.dumps(_build_block_extents(), ensure_ascii=False).encode("utf-8")
-            return self._send_bytes(body, "application/json")
+        if raw_path in VIEWER_FILES:
+            name, ctype = VIEWER_FILES[raw_path]
+            return self._serve_file(VIEWER_DIR / name, ctype)
 
         disk_path = raw_path.replace("/SceneServer/", "/").replace("/SceneServer", "")
 

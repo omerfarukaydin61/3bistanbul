@@ -2,8 +2,9 @@
 3B Istanbul - Blok Kapsama Alanlari
 ===================================
 Her katmanin sadece layers/0 bilgisini (birkac KB) cekip kapsama alanini
-(fullExtent) blocks.html'in okudugu block_extents.json dosyasina yazar.
-3D veri indirmez.
+(fullExtent) repo'daki viewer/block_extents.json dosyasina yazar. Blok haritasi
+ve goruntuleyici bu listeyi kullanir. 3D veri indirmez; yalnizca IBB katman
+listesi degistiginde calistirilir.
 
 Kullanim:
     python downloader/fetch_extents.py
@@ -18,6 +19,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from download_3d import CBS_BASE, DATA_DIR, I3SDownloader
+
+EXTENTS_FILE = Path(__file__).resolve().parent.parent / "viewer" / "block_extents.json"
 
 
 def fetch_extent(downloader, name):
@@ -37,21 +40,20 @@ def fetch_extent(downloader, name):
 
 def main():
     parser = argparse.ArgumentParser(description="Blok kapsama alanlarini cek")
-    parser.add_argument("--output", "-o", default=str(DATA_DIR))
     parser.add_argument("--workers", "-w", type=int, default=8)
     args = parser.parse_args()
 
-    downloader = I3SDownloader(output_dir=args.output, workers=args.workers)
+    downloader = I3SDownloader(output_dir=DATA_DIR, workers=args.workers)
     names = [l["name"] for l in downloader.get_layers()]
 
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
         blocks = list(executor.map(lambda n: fetch_extent(downloader, n), names))
+    blocks.sort(key=lambda b: b["name"])
 
-    out = Path(args.output) / "block_extents.json"
-    out.write_text(json.dumps({"blocks": blocks}, ensure_ascii=False, indent=1),
-                   encoding="utf-8")
+    EXTENTS_FILE.write_text(json.dumps({"blocks": blocks}, ensure_ascii=False, indent=1) + "\n",
+                            encoding="utf-8", newline="\n")
     missing = sum(1 for b in blocks if b["extent"] is None)
-    print(f"\n[TAMAM] {len(blocks)} katman -> {out}"
+    print(f"\n[TAMAM] {len(blocks)} katman -> {EXTENTS_FILE}"
           f"{f' ({missing} tanesinin alani yok)' if missing else ''}")
 
 

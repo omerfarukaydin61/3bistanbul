@@ -37,9 +37,9 @@ npm run dev
 
 - **http://localhost:8765** — 3D görüntüleyici. `DATA_DIR` içindeki indirilmiş blokları
   kendisi bulur ve yükler.
-- **http://localhost:8765/blocks.html** — blok haritası. 107 katmanın kapsama alanını
-  gösterir, seçilen bloklar için indirme komutunu üretir. Tüm katmanlar için önce
-  `npm run extents` çalıştırılmalı; çalıştırılmadıysa yalnızca indirilmiş bloklar görünür.
+- **http://localhost:8765/blocks.html** — blok haritası. 107 katmanın tamamının sınırını
+  gösterir; indirilmiş olanlar yeşil, indirilebilecek olanlar mavi. Seçilen bloklar için
+  indirme komutunu üretir. Katman listesi repo'daki `viewer/block_extents.json`'dan gelir.
 
 Port vermek için: `npm run dev -- 9000`. Sayfaları dosyadan (`file://`)
 açmayın; veri yalnızca sunucu üzerinden yüklenir.
@@ -59,7 +59,7 @@ npm run download -- --blocks 56 59
 
 | Script | Ne yapar |
 |---|---|
-| `downloader/fetch_extents.py` | Her katmanın kapsama alanını çekip `$DATA_DIR/block_extents.json`'a yazar. Blok haritası ve görüntüleyici bu dosyayı kullanır; dosya yoksa sunucu listeyi indirilmiş bloklardan üretir. |
+| `downloader/fetch_extents.py` | Her katmanın kapsama alanını çekip repo'daki `viewer/block_extents.json`'u yeniden yazar. Blok haritası ve görüntüleyici bu dosyayı kullanır. Yalnızca İBB katman listesi değiştiğinde çalıştırılır. |
 | `downloader/clean_stubs.py` | Token hatası sırasında veri yerine kaydedilmiş `Invalid Token` dosyalarını bulur; `--delete` ile siler. |
 
 Aynı anda birden fazla indirme ya da `fetch_extents.py` çalıştırmayın: her biri yeni
