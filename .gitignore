@@ -1,5 +1,5 @@
-# Indirilen 3D veri (yuzlerce GB) ve uretilen katalog
-data/
+.env
+package-lock.json
 
 __pycache__/
 *.pyc

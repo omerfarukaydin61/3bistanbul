@@ -8,14 +8,16 @@ tarayıcıda yerel olarak görüntüler.
 ```
 downloader/   İBB servisinden veri indiren scriptler
 viewer/       Yerel sunucu, 3D görüntüleyici ve blok haritası
-data/         İndirilen bloklar ve block_extents.json (git'e girmez)
 ```
 
 ## Kurulum
 
-```powershell
+```bash
 pip install -r requirements.txt
+cp .env.example .env    # DATA_DIR: verinin klasörü (indirici yazar, görüntüleyici okur)
 ```
+
+Python 3.10 ve üstü.
 
 Tüm komutlar repo kökünden çalıştırılır. `package.json` yalnızca kısayol tutar
 (Node bağımlılığı yok); script argümanları `--` sonrasına yazılır.
@@ -33,7 +35,7 @@ Tüm komutlar repo kökünden çalıştırılır. `package.json` yalnızca kısa
 npm run dev
 ```
 
-- **http://localhost:8765** — 3D görüntüleyici. `data/` içindeki indirilmiş blokları
+- **http://localhost:8765** — 3D görüntüleyici. `DATA_DIR` içindeki indirilmiş blokları
   kendisi bulur ve yükler.
 - **http://localhost:8765/blocks.html** — blok haritası. 107 katmanın kapsama alanını
   gösterir, seçilen bloklar için indirme komutunu üretir.
@@ -56,7 +58,7 @@ npm run download -- --blocks 56 59
 
 | Script | Ne yapar |
 |---|---|
-| `downloader/fetch_extents.py` | Her katmanın kapsama alanını çekip `data/block_extents.json`'a yazar. Blok haritası ve görüntüleyici bu dosyayı kullanır. |
+| `downloader/fetch_extents.py` | Her katmanın kapsama alanını çekip `$DATA_DIR/block_extents.json`'a yazar. Blok haritası ve görüntüleyici bu dosyayı kullanır. |
 | `downloader/clean_stubs.py` | Token hatası sırasında veri yerine kaydedilmiş `Invalid Token` dosyalarını bulur; `--delete` ile siler. |
 
 Aynı anda birden fazla indirme ya da `fetch_extents.py` çalıştırmayın: her biri yeni

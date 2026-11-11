@@ -10,22 +10,50 @@ Kullanim:
     python downloader/download_3d.py --workers 8              # 8 paralel indirme
     python downloader/download_3d.py --workers 8 --delay 0.2  # Daha yavas, guvenli
 
-Veriler repo'daki data/ klasorune iner.
+Veriler DATA_DIR klasorune iner (.env ya da ortam degiskeni; --output ile degisir).
 """
 
 import argparse
 import json
+import os
+import re
 import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from pathlib import Path
 
 import requests
 
 API_URL = "https://3bistanbul-api.ibb.gov.tr/api/Sceneserver/layers"
 CBS_BASE = "https://cbsapi.ibb.gov.tr/GW"
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+REPO_DIR = Path(__file__).resolve().parent.parent
+
+
+def load_data_dir():
+    """Veri klasoru: ortam degiskeni DATA_DIR, yoksa repo kokundeki .env (serve.py ayni kurali kullanir)."""
+    env_file = REPO_DIR / ".env"
+    if env_file.is_file():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip())
+    if not os.environ.get("DATA_DIR"):
+        sys.exit("DATA_DIR tanimli degil: .env.example'i .env olarak kopyalayip veri klasorunu yazin")
+    return Path(os.environ["DATA_DIR"]).expanduser()
+
+
+DATA_DIR = load_data_dir()
+
+
+def parse_timestamp_ms(ts):
+    """Token bitis zamani (ms). Sunucu .NET bicimi yollar: 7 basamakli saniye kesri ('…17.1368904+00:00');
+    Python 3.10 fromisoformat en cok 6 basamak okur, fazlasi kirpilir."""
+    ts = ts.replace("Z", "+00:00")
+    ts = re.sub(r"(\.\d{6})\d+", r"\1", ts)
+    return datetime.fromisoformat(ts).timestamp() * 1000
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -57,9 +85,7 @@ class TokenManager:
             data = resp.json()
             key_data = data["cbs3bKey"]
             self._token = key_data["value"]
-            from datetime import datetime
-            ts = key_data["timeStamp"].replace("Z", "+00:00")
-            self._expiry = datetime.fromisoformat(ts).timestamp() * 1000
+            self._expiry = parse_timestamp_ms(key_data["timeStamp"])
             print(f"[TOKEN] Token alindi, gecerlilik: {key_data['timeStamp']}")
             return self._token
 

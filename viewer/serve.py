@@ -5,13 +5,29 @@ Sonra http://localhost:8765 adresini acin.
 """
 import http.server
 import json
+import os
 import socketserver
 import sys
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 
-VIEWER_DIR = Path(__file__).resolve().parent
-DATA_DIR = VIEWER_DIR.parent / "data"
+REPO_DIR = Path(__file__).resolve().parent.parent
+VIEWER_DIR = REPO_DIR / "viewer"
+
+def _load_env():
+    env_file = REPO_DIR / ".env"
+    if env_file.is_file():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip())
+
+_load_env()
+
+if not os.environ.get("DATA_DIR"):
+    sys.exit("DATA_DIR tanimli degil: .env.example'i .env olarak kopyalayip veri klasorunu yazin")
+DATA_DIR = Path(os.environ["DATA_DIR"]).expanduser()
 PORT = 8765
 PAGES = {"": "viewer.html", "index.html": "viewer.html",
          "viewer.html": "viewer.html", "blocks.html": "blocks.html"}
@@ -38,6 +54,27 @@ def fix_texture_defs(data):
     return data
 
 
+def _build_block_extents():
+    blocks = []
+    for d in sorted(DATA_DIR.iterdir()):
+        if not d.is_dir() or not d.name.startswith("server"):
+            continue
+        layer_json = d / "layers" / "0.json"
+        extent = None
+        if layer_json.is_file():
+            try:
+                info = json.loads(layer_json.read_bytes())
+                ext = info.get("fullExtent") or info.get("store", {}).get("extent")
+                if isinstance(ext, dict):
+                    extent = {k: ext[k] for k in ("xmin", "ymin", "xmax", "ymax") if k in ext}
+                elif isinstance(ext, list) and len(ext) >= 4:
+                    extent = {"xmin": ext[0], "ymin": ext[1], "xmax": ext[2], "ymax": ext[3]}
+            except Exception:
+                pass
+        blocks.append({"name": d.name, "extent": extent})
+    return {"blocks": blocks}
+
+
 class I3SHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -45,6 +82,10 @@ class I3SHandler(http.server.BaseHTTPRequestHandler):
 
         if raw_path in PAGES:
             return self._serve_file(VIEWER_DIR / PAGES[raw_path], "text/html")
+
+        if raw_path == "block_extents.json":
+            body = json.dumps(_build_block_extents(), ensure_ascii=False).encode("utf-8")
+            return self._send_bytes(body, "application/json")
 
         disk_path = raw_path.replace("/SceneServer/", "/").replace("/SceneServer", "")
 
