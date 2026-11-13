@@ -79,3 +79,8 @@ npm run download -- --blocks 56 59
 
 `viewer/` dosyaları Docker imajına kopyalanır; değiştirildiklerinde
 `docker compose up -d --build` ile imaj yeniden üretilir.
+
+## Kaynak
+
+3D şehir modeli İstanbul Büyükşehir Belediyesi'nin **3B İstanbul** projesine aittir:
+https://3bistanbul.ibb.gov.tr/
