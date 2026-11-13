@@ -3,82 +3,79 @@
 İBB'nin 3B İstanbul şehir modelini (I3S / IntegratedMesh) bloklar halinde indirip
 tarayıcıda yerel olarak görüntüler.
 
-## Yapı
+![Tarihi yarımada, 3D görüntüleyici](docs/viewer.jpg)
 
-```
-downloader/   İBB servisinden veri indiren scriptler
-viewer/       Yerel sunucu, 3D görüntüleyici ve blok haritası
-```
+## Gereksinimler
+
+- Veri için disk alanı: blok başına ~30 GB, tamamı ~3.3 TB
+- Çalıştırmak için **Docker** ya da **Python 3.10+**
 
 ## Kurulum
 
 ```bash
-pip install -r requirements.txt
-cp .env.example .env    # DATA_DIR: verinin klasörü (indirici yazar, görüntüleyici okur)
+git clone https://github.com/omerfarukaydin61/3bistanbul.git
+cd 3bistanbul
+cp .env.example .env
 ```
 
-Python 3.10 ve üstü.
+`.env` içindeki `DATA_DIR`'a verinin duracağı klasörü yazın (örn. `D:/3bistanbul_3d`).
+İndirici bu klasöre yazar, görüntüleyici buradan okur.
 
-Tüm komutlar repo kökünden çalıştırılır. `package.json` yalnızca kısayol tutar
-(Node bağımlılığı yok); script argümanları `--` sonrasına yazılır.
+## Çalıştırma
 
-| Kısayol | Karşılığı |
-|---|---|
-| `npm run dev` | `python viewer/serve.py` |
-| `npm run download -- --blocks 56 59` | `python downloader/download_3d.py --blocks 56 59` |
-| `npm run extents` | `python downloader/fetch_extents.py` |
-| `npm run clean-stubs -- --delete` | `python downloader/clean_stubs.py --delete` |
+### Docker
 
-## Görüntüleme
-
-```powershell
-npm run dev
-```
-
-- **http://localhost:8765** — 3D görüntüleyici. `DATA_DIR` içindeki indirilmiş blokları
-  kendisi bulur ve yükler.
-- **http://localhost:8765/blocks.html** — blok haritası. 107 katmanın tamamının sınırını
-  gösterir; indirilmiş olanlar yeşil, indirilebilecek olanlar mavi. Seçilen bloklar için
-  indirme komutunu üretir. Katman listesi repo'daki `viewer/block_extents.json`'dan gelir.
-
-Port vermek için: `npm run dev -- 9000`. Sayfaları dosyadan (`file://`)
-açmayın; veri yalnızca sunucu üzerinden yüklenir.
-
-### Docker ile
-
-```powershell
+```bash
 docker compose up -d --build
 ```
 
-Görüntüleyici konteyner ayakta olduğu sürece **http://localhost:8765** adresinde açık kalır;
-konteyner `restart: unless-stopped` ile Docker başlarken kendiliğinden kalkar, çökerse
-yeniden başlar. Durdurmak için `docker compose down`.
+Arayüz container ayakta olduğu sürece **http://localhost:8765** adresinde açıktır;
+Docker açılınca kendiliğinden başlar. Durdurmak için `docker compose down`.
 
-- `.env`'deki `DATA_DIR` host'taki veri klasörüdür; konteynere `/data` olarak bağlanır.
-  Python kurulumu gerekmez, yalnızca `.env` gerekir.
-- Yeni blok indirildiğinde konteyneri yeniden başlatmak gerekmez; sayfayı yenilemek yeter.
-- İndirme konteyner içinden de çalıştırılabilir (veri aynı klasöre iner):
-  `docker compose exec viewer python downloader/download_3d.py --blocks 56 59`
-- `viewer/` dosyaları imaja kopyalanır; değiştirildiklerinde `docker compose up -d --build`
-  ile imaj yeniden üretilir. `fetch_extents.py` repo dosyasını yazdığı için host'ta çalıştırılır.
+### Python
 
-## İndirme
+```bash
+pip install -r requirements.txt
+npm run dev            # = python viewer/serve.py
+```
 
-```powershell
+`npm` kısayolları yalnızca Python komutlarını çağırır, Node bağımlılığı yoktur.
+
+## Arayüz
+
+**http://localhost:8765** — 3D görüntüleyici. `DATA_DIR`'daki indirilmiş blokları bulup
+yükler; sağdaki panelden bloklar açılıp kapatılır. Yeni blok indirildiğinde sayfayı
+yenilemek yeter.
+
+![Süleymaniye yakın görünüm](docs/viewer-detay.jpg)
+
+**http://localhost:8765/blocks.html** — blok haritası. 107 katmanın tamamını gösterir:
+indirilmişler yeşil, indirilebilirler mavi. Seçilen bloklar için indirme komutunu üretir.
+
+![Blok haritası](docs/blok-haritasi.jpg)
+
+## Blok indirme
+
+```bash
+# Docker
+docker compose exec viewer python downloader/download_3d.py --blocks 56 59
+
+# Python
 npm run download -- --blocks 56 59
 ```
 
 - `--blocks` tam eşleşme yapar: `57` → `Blok_57`; `Yama_56_57`, `Adalar` gibi adlar
-  kendileriyle eşleşir. Verilmezse tüm katmanlar iner (~3.3 TB).
+  kendileriyle eşleşir. Verilmezse tüm katmanlar iner.
 - Var olan dosyalar atlanır; yarım kalan bir blok aynı komutla tamamlanır.
-- Sadece görüntüleyicinin kullandığı Draco geometri (`geometries/1`) ve JPEG doku iner; blok başına ~30 GB.
+- Aynı anda birden fazla indirme ya da `fetch_extents.py` çalıştırmayın: her biri yeni
+  token alır ve diğerinin token'ını geçersiz kılar.
 
-### Yardımcı scriptler
+## Yardımcı scriptler
 
-| Script | Ne yapar |
+| Komut | Ne yapar |
 |---|---|
-| `downloader/fetch_extents.py` | Her katmanın kapsama alanını çekip repo'daki `viewer/block_extents.json`'u yeniden yazar. Blok haritası ve görüntüleyici bu dosyayı kullanır. Yalnızca İBB katman listesi değiştiğinde çalıştırılır. |
-| `downloader/clean_stubs.py` | Token hatası sırasında veri yerine kaydedilmiş `Invalid Token` dosyalarını bulur; `--delete` ile siler. |
+| `npm run extents` | Katman kapsama alanlarını çekip `viewer/block_extents.json`'u yeniden yazar. Yalnızca İBB katman listesi değiştiğinde, host'ta çalıştırılır. |
+| `npm run clean-stubs -- --delete` | Token hatası sırasında veri yerine kaydedilmiş `Invalid Token` dosyalarını bulur ve siler (`--delete` olmadan yalnızca listeler). |
 
-Aynı anda birden fazla indirme ya da `fetch_extents.py` çalıştırmayın: her biri yeni
-token alır ve diğerinin token'ını geçersiz kılar.
+`viewer/` dosyaları Docker imajına kopyalanır; değiştirildiklerinde
+`docker compose up -d --build` ile imaj yeniden üretilir.
