@@ -1,0 +1,12 @@
+services:
+  viewer:
+    build: .
+    image: 3bistanbul
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      # Host'taki veri klasoru (.env'deki DATA_DIR) konteynerde /data olarak gorunur
+      - type: bind
+        source: ${DATA_DIR:?DATA_DIR tanimli degil, .env.example'a bakin}
+        target: /data

@@ -44,6 +44,24 @@ npm run dev
 Port vermek için: `npm run dev -- 9000`. Sayfaları dosyadan (`file://`)
 açmayın; veri yalnızca sunucu üzerinden yüklenir.
 
+### Docker ile
+
+```powershell
+docker compose up -d --build
+```
+
+Görüntüleyici konteyner ayakta olduğu sürece **http://localhost:8765** adresinde açık kalır;
+konteyner `restart: unless-stopped` ile Docker başlarken kendiliğinden kalkar, çökerse
+yeniden başlar. Durdurmak için `docker compose down`.
+
+- `.env`'deki `DATA_DIR` host'taki veri klasörüdür; konteynere `/data` olarak bağlanır.
+  Python kurulumu gerekmez, yalnızca `.env` gerekir.
+- Yeni blok indirildiğinde konteyneri yeniden başlatmak gerekmez; sayfayı yenilemek yeter.
+- İndirme konteyner içinden de çalıştırılabilir (veri aynı klasöre iner):
+  `docker compose exec viewer python downloader/download_3d.py --blocks 56 59`
+- `viewer/` dosyaları imaja kopyalanır; değiştirildiklerinde `docker compose up -d --build`
+  ile imaj yeniden üretilir. `fetch_extents.py` repo dosyasını yazdığı için host'ta çalıştırılır.
+
 ## İndirme
 
 ```powershell
