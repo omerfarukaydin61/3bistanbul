@@ -273,52 +273,44 @@ class I3SDownloader:
         return all_mesh_nodes
 
     def download_node_resources(self, layer_name, node):
+        # I3S (nodepage'li): kaynak adresi nodes/<kaynak no>/…, kaynak no = mesh.geometry.resource (malzeme ayni no),
+        # dugum no (index) degil. Dugum no ile istenince sunucu o numarali KAYNAGI verir; kaynak no'su hicbir mesh
+        # dugumunun no'su olmayan kaynaklar hic inmiyordu (blok basina ~30-115 dugum, ornek: Galatasaray Adasi).
         base = f"{CBS_BASE}/{layer_name}/SceneServer/layers/0"
-        node_idx = node["index"]
-        mesh = node.get("mesh", {})
-        geo_resource = mesh.get("geometry", {}).get("resource")
-
-        if geo_resource is None:
+        resource = node.get("mesh", {}).get("geometry", {}).get("resource")
+        if resource is None:
             return
 
-        node_dir = self.output_dir / layer_name / "layers" / "0" / "nodes" / str(node_idx)
+        node_dir = self.output_dir / layer_name / "layers" / "0" / "nodes" / str(resource)
+
+        def fetch(path, url, binary):
+            """dosya yoksa indirir; istek atildiysa True"""
+            if path.exists():
+                self.stats.add_skip()
+                return False
+            data = self._get(url, binary=binary)
+            if data:
+                size = self._save(path, data, binary=binary)
+                self.stats.add_download(size)
+            else:
+                self.stats.add_error()
+            return True
 
         # Sadece Draco geometri (geometries/1). Goruntuleyici yalnizca bunu istiyor;
         # sikistirilmamis geometries/0 ayni veri ve ~12 kat buyuk.
-        geo_path = node_dir / "geometries" / "1"
-        if not geo_path.exists():
-            data = self._get(f"{base}/nodes/{node_idx}/geometries/1", binary=True)
-            if data:
-                size = self._save(geo_path, data, binary=True)
-                self.stats.add_download(size)
-            else:
-                self.stats.add_error()
-        else:
-            self.stats.add_skip()
-
-        if self.delay > 0:
-            time.sleep(self.delay * 0.5)
-
+        istek = fetch(node_dir / "geometries" / "1", f"{base}/nodes/{resource}/geometries/1", True)
         # JPEG texture
-        tex_path = node_dir / "textures" / "0"
-        if not tex_path.exists():
-            data = self._get(f"{base}/nodes/{node_idx}/textures/0", binary=True)
-            if data:
-                size = self._save(tex_path, data, binary=True)
-                self.stats.add_download(size)
-            else:
-                self.stats.add_error()
-        else:
-            self.stats.add_skip()
-
+        istek |= fetch(node_dir / "textures" / "0", f"{base}/nodes/{resource}/textures/0", True)
         # Shared resources
         shared_path = node_dir / "shared.json"
         if not shared_path.exists():
-            data = self._get(f"{base}/nodes/{node_idx}/shared?f=json")
+            data = self._get(f"{base}/nodes/{resource}/shared?f=json")
             if data:
                 self._save(shared_path, data)
+            istek = True
 
-        if self.delay > 0:
+        # bekleme yalniz sunucuya gidildiyse (tamamlama kosusunda var olan dugumler beklemeden gecer)
+        if istek and self.delay > 0:
             time.sleep(self.delay)
 
     def download_block(self, layer_name):
