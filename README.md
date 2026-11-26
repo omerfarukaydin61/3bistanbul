@@ -1,5 +1,7 @@
 # 3B İstanbul
 
+**Türkçe** | [English](README.en.md)
+
 İBB'nin 3B İstanbul şehir modelini (I3S / IntegratedMesh) bloklar halinde indirip
 tarayıcıda yerel olarak görüntüler.
 
